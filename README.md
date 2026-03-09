@@ -239,3 +239,161 @@ This project was created for the **Apple Swift Student Challenge 2026** to demon
 - Accessibility standards (WCAG) implementation
 - SwiftUI advanced patterns (MainActor, @StateObject, @Environment)
 - Scientific algorithm implementation (color transformation matrices)
+
+---
+
+## 📁 Project Structure
+
+```
+ColourBridge.swiftpm/
+├── MyApp.swift                 # App entry point (@main)
+├── Package.swift               # Swift package manifest
+├── ContentView.swift           # Root navigation and welcome screen
+├── ColorAnalyzer.swift         # Core color analysis logic
+├── CameraAnalyzeView.swift     # Real-time camera interface
+├── SampleAnalyzeView.swift     # Static image/chart analysis
+├── SummaryView.swift           # Data visualization and insights
+├── Assets.xcassets/            # App icons and assets
+├── README.md                   # This file
+└── .gitignore                  # Git ignore rules
+```
+
+### File Responsibilities
+
+| File | Purpose | Key Features |
+|------|---------|--------------|
+| `MyApp.swift` | Application lifecycle | SwiftUI App protocol, window configuration |
+| `ContentView.swift` | Main navigation hub | Three entry points, PhotosPicker, preview cards |
+| `ColorAnalyzer.swift` | Pure logic layer | Color sampling, contrast calculation, CVD simulation |
+| `CameraAnalyzeView.swift` | Camera feature | AVFoundation, real-time preview, tap interaction |
+| `SampleAnalyzeView.swift` | Photo/chart analysis | Chart generation, photo import, coordinate mapping |
+| `SummaryView.swift` | Results dashboard | Swift Charts, statistics, educational content |
+
+---
+
+## 💡 Code Quality & Best Practices
+
+### Architecture Principles
+- **Separation of Concerns**: Pure logic (ColorAnalyzer) separate from UI
+- **Single Responsibility**: Each view handles one primary function
+- **Immutability**: ColorSample and enums are immutable structs/enums
+- **Type Safety**: Strong typing with Swift 6, no force unwrapping
+
+### Swift 6 & Concurrency
+- **Actor Isolation**: `@MainActor` for UI components
+- **Sendable Protocol**: All data models conform to Sendable
+- **No Data Races**: Proper isolation of camera callback threads
+- **Structured Concurrency**: Task-based async/await patterns
+
+### Accessibility Features
+- **VoiceOver Support**: Comprehensive accessibility labels and hints
+- **Dynamic Type**: Respects user font size preferences
+- **High Contrast**: Works well in all color schemes
+- **Descriptive Labels**: Clear button and control labeling
+
+### Performance Optimizations
+- **Efficient Sampling**: CIAreaAverage filter for O(1) region averaging
+- **Frame Throttling**: 30 FPS camera frame processing limit
+- **Lazy Rendering**: SwiftUI's declarative updates minimize overdraw
+- **Reusable Context**: Single CIContext instance for image rendering
+
+---
+
+## 🔮 Future Enhancements
+
+### Planned Features
+- [ ] **Tritanopia Simulation**: Add support for blue-yellow color blindness
+- [ ] **Color Palette Export**: Save analyzed color palettes for reference
+- [ ] **Batch Analysis**: Process multiple images at once
+- [ ] **Color Suggestions**: Recommend accessible alternative colors
+- [ ] **AR Mode**: Real-time color labels using ARKit
+- [ ] **Haptic Feedback**: Vibration feedback for successful samples
+- [ ] **Multi-Language Support**: Localization for global accessibility
+- [ ] **iCloud Sync**: Sync analyzed palettes across devices
+- [ ] **Widget Support**: Quick access to last analyzed colors
+- [ ] **Apple Watch Extension**: Wrist-based color analysis
+
+### Technical Improvements
+- [ ] Machine Learning: Intelligent color clustering and categorization
+- [ ] Better CVD Models: More accurate simulation algorithms
+- [ ] PDF Export: Generate accessibility reports
+- [ ] Historical Data: Track analyzed colors over time
+- [ ] Color Theory Tips: Educational content about color combinations
+- [ ] Integration with Color Palette APIs: Suggest professional palettes
+
+---
+
+## 🤝 Contributing
+
+This is an educational project for the Swift Student Challenge, but suggestions and feedback are welcome!
+
+### How to Contribute
+1. **Report Issues**: Open an issue describing bugs or improvements
+2. **Suggest Features**: Share ideas for accessibility enhancements
+3. **Code Reviews**: Provide feedback on code quality and architecture
+4. **Documentation**: Help improve or translate documentation
+5. **Testing**: Test on different devices and report findings
+
+### Development Guidelines
+- Follow Swift API Design Guidelines
+- Maintain Swift 6 strict concurrency compliance
+- Add comprehensive comments for complex logic
+- Ensure all UI has proper accessibility support
+- Write clean, self-documenting code
+- Keep performance in mind (especially for camera features)
+
+---
+
+## 🙏 Acknowledgments
+
+### Inspiration & Research
+- **WCAG Guidelines**: Web Content Accessibility Guidelines by W3C
+- **Viénot et al. (1999)**: "Digital video colourmaps for checking the legibility of displays by dichromats"
+- **Apple Human Interface Guidelines**: Accessibility best practices
+- **Color Blind Awareness**: Educational resources on CVD
+
+### Technologies & Frameworks
+- **Apple Developer Ecosystem**: Swift, SwiftUI, Core Image, AVFoundation
+- **Swift Charts**: Native data visualization framework
+- **Swift Package Manager**: Dependency management and app packaging
+
+### Special Thanks
+- Apple Education Team for the Swift Student Challenge
+- The iOS accessibility community for advocacy and education
+- Open-source contributors who advance accessibility tools
+- People with color-vision deficiencies who inspired this project
+
+---
+
+## 📄 License
+
+This project is created for educational purposes as part of the **Apple Swift Student Challenge 2026**.
+
+**Copyright © 2026 Soham**
+
+Permission is granted to use this code for learning, educational purposes, and portfolio demonstrations. For any other use, please contact the author.
+
+---
+
+## 📬 Contact & Links
+
+- **GitHub**: [@SohamB4746Y](https://github.com/SohamB4746Y)
+- **Project Repository**: [ColourBridge](https://github.com/SohamB4746Y/ColourBridge)
+- **Swift Student Challenge**: Apple WWDC 2026
+
+### Useful Resources
+- [Apple Developer Documentation](https://developer.apple.com/documentation/)
+- [WCAG 2.1 Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)
+- [Color Blindness Simulator](https://www.color-blindness.com/coblis-color-blindness-simulator/)
+- [Swift Programming Language](https://docs.swift.org/swift-book/)
+
+---
+
+<p align="center">
+  <strong>Built with ❤️ and Swift</strong><br>
+  Making the world more accessible, one color at a time 🌈
+</p>
+
+---
+
+**Note**: This app is designed as an assistive tool and educational demonstration. It should not be used as the sole method for critical color-dependent tasks. If you have color-vision deficiency, consider consulting with an eye care professional for comprehensive solutions.
