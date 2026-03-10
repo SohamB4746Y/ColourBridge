@@ -2,11 +2,14 @@ import SwiftUI
 import CoreImage
 import AVFoundation
 
+/// Static-image analysis screen for built-in charts and imported photos.
 @MainActor
 struct SampleAnalyzeView: View {
 
+    /// Optional external image selected by the user.
     var externalImage: CIImage? = nil
 
+    /// Indicates whether the current session uses an imported image.
     private var isExternalImage: Bool { externalImage != nil }
 
     @State private var selectedMode: SimulationMode = .normal
@@ -19,6 +22,7 @@ struct SampleAnalyzeView: View {
     @State private var chartCIImage: CIImage?
     @State private var displayUIImage: UIImage?
 
+    /// Main layout for image interaction and bottom analysis controls.
     var body: some View {
         ZStack(alignment: .bottom) {
             GeometryReader { geo in
@@ -62,6 +66,7 @@ struct SampleAnalyzeView: View {
         }
     }
 
+    /// Source bars used by the built-in demo chart.
     private static let chartBars: [(UIColor, CGFloat, String)] = [
         (UIColor(red: 0.90, green: 0.15, blue: 0.15, alpha: 1), 0.85, "A"),
         (UIColor(red: 0.15, green: 0.70, blue: 0.20, alpha: 1), 0.60, "B"),
@@ -71,6 +76,12 @@ struct SampleAnalyzeView: View {
         (UIColor(red: 0.00, green: 0.70, blue: 0.65, alpha: 1), 0.65, "F"),
     ]
 
+    /// Renders a chart image with accessibility simulation applied to bar colors.
+    ///
+    /// - Parameters:
+    ///   - size: Output image size.
+    ///   - mode: Simulation mode applied before drawing.
+    /// - Returns: Rendered `UIImage` used by the analysis view.
     private static func renderChartImage(size: CGSize = CGSize(width: 600, height: 400),
                                          mode: SimulationMode = .normal) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: size)
@@ -124,6 +135,7 @@ struct SampleAnalyzeView: View {
         }
     }
 
+    /// Display image backed by either imported content or the generated sample chart.
     private var displayImage: Image {
         if let uiImage = displayUIImage {
             return Image(uiImage: uiImage)
@@ -131,6 +143,7 @@ struct SampleAnalyzeView: View {
         return Image(uiImage: Self.renderChartImage(mode: selectedMode))
     }
 
+    /// Prepares render and sampling sources for the currently selected mode.
     private func prepareImages() {
         if let external = externalImage {
             if baseCIImage == nil {
@@ -151,20 +164,24 @@ struct SampleAnalyzeView: View {
         }
     }
 
+    /// Label for the current sampled color.
     private var displayName: String {
         currentSample?.name ?? "Tap a bar to sample"
     }
 
+    /// Formatted readability text derived from the best contrast result.
     private var contrastText: String {
         guard let s = currentSample else { return "—" }
         let best = max(s.contrastVsWhite, s.contrastVsBlack)
         return String(format: "%.1f:1 – %@", best, s.readability.rawValue)
     }
 
+    /// Swatch color displayed in the analysis card.
     private var swatchColor: Color {
         if let c = currentSample?.uiColor { return Color(c) } else { return .gray }
     }
 
+    /// Bottom analysis panel with mode selector and navigation to summary.
     private var infoCard: some View {
         VStack(spacing: 14) {
             HStack(spacing: 14) {
@@ -210,8 +227,14 @@ struct SampleAnalyzeView: View {
         .accessibilityLabel("Color analysis card. Tap a bar in the chart to sample its color. Current sample: \(displayName). \(collectedSamples.count) samples collected.")
     }
 
+    /// Default size used for internally generated charts.
     private static let chartSize = CGSize(width: 600, height: 400)
 
+    /// Converts tap coordinates to image coordinates and records a color sample.
+    ///
+    /// - Parameters:
+    ///   - location: Tap location in view coordinates.
+    ///   - viewSize: Size of the image container view.
     private func handleTap(at location: CGPoint, in viewSize: CGSize) {
         guard let ciImage = chartCIImage else { return }
 

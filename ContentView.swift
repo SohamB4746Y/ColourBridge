@@ -2,8 +2,10 @@ import SwiftUI
 import PhotosUI
 import CoreImage
 
+/// Root navigation container for the application.
 @MainActor
 struct ContentView: View {
+    /// Declares the root navigation stack.
     var body: some View {
         NavigationStack {
             WelcomeView()
@@ -11,6 +13,7 @@ struct ContentView: View {
     }
 }
 
+/// Landing experience that routes users to camera, sample, or photo workflows.
 @MainActor
 struct WelcomeView: View {
     
@@ -19,6 +22,7 @@ struct WelcomeView: View {
     @State private var isNavigatingToPhoto = false
     @State private var isLoadingPhoto = false
     
+    /// Primary welcome interface and top-level actions.
     var body: some View {
         ScrollView {
             VStack(spacing: 32) {
@@ -123,7 +127,7 @@ struct WelcomeView: View {
         }
     }
     
-    
+    /// Preview strip illustrating standard versus accessibility-enhanced presentation.
     private var colorPreview: some View {
         HStack(spacing: 16) {
             previewCard(title: "Original", colors: [.red, .green])
@@ -134,6 +138,13 @@ struct WelcomeView: View {
         .accessibilityLabel("Preview showing an original color pair and its accessible alternative with patterns.")
     }
     
+    /// Builds a compact preview card used in the landing comparison row.
+    ///
+    /// - Parameters:
+    ///   - title: Card title text.
+    ///   - colors: Colors rendered as preview swatches.
+    ///   - accessible: Indicates whether symbolic overlays should be shown.
+    /// - Returns: A configured preview card view.
     private func previewCard(title: String, colors: [Color], accessible: Bool = false) -> some View {
         VStack(spacing: 8) {
             Text(title)

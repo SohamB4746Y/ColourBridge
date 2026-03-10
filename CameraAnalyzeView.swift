@@ -2,10 +2,11 @@ import SwiftUI
 @preconcurrency import AVFoundation
 import CoreImage
 
+/// Manages camera permissions, session lifecycle, and frame delivery.
 @MainActor
 final class CameraManager: NSObject, ObservableObject {
     
-    
+    /// Camera permission state used by the UI to present the correct screen.
     enum AuthStatus {
         case notDetermined, authorized, denied
     }
@@ -24,7 +25,7 @@ final class CameraManager: NSObject, ObservableObject {
     
     nonisolated(unsafe) private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
     
-    
+    /// Requests or refreshes camera authorization status.
     func checkAuthorization() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -40,6 +41,7 @@ final class CameraManager: NSObject, ObservableObject {
         }
     }
     
+    /// Starts camera capture, configuring the session once when required.
     func startSession() {
         let session = self.session
         let videoOutput = self.videoOutput
@@ -56,6 +58,7 @@ final class CameraManager: NSObject, ObservableObject {
         }
     }
     
+    /// Configures camera input and video output for capture callbacks.
     nonisolated private func configureSession(session: AVCaptureSession,
                                               videoOutput: AVCaptureVideoDataOutput) {
         session.beginConfiguration()
@@ -85,6 +88,7 @@ final class CameraManager: NSObject, ObservableObject {
         session.commitConfiguration()
     }
     
+            /// Stops camera capture asynchronously.
     func stopSession() {
         let session = self.session
         processingQueue.async {
@@ -94,6 +98,7 @@ final class CameraManager: NSObject, ObservableObject {
 }
 
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
+    /// Delivers throttled camera frames converted to `CIImage` for UI analysis.
     nonisolated func captureOutput(_ output: AVCaptureOutput,
                                    didOutput sampleBuffer: CMSampleBuffer,
                                    from connection: AVCaptureConnection) {
@@ -112,6 +117,7 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     }
 }
 
+/// Live camera analysis screen with tap-to-sample interaction.
 @MainActor
 struct CameraAnalyzeView: View {
     
@@ -126,6 +132,7 @@ struct CameraAnalyzeView: View {
     
     private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
     
+    /// Main camera state routing based on permission and session status.
     var body: some View {
         Group {
             switch cameraManager.authorizationStatus {
@@ -159,7 +166,7 @@ struct CameraAnalyzeView: View {
         }
     }
     
-    
+    /// Camera preview layer with tap gesture sampling and floating analysis card.
     private var cameraContent: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
@@ -195,6 +202,7 @@ struct CameraAnalyzeView: View {
         .ignoresSafeArea()
     }
     
+    /// Returns a simulated preview image for the selected accessibility mode.
     private var filteredCameraImage: Image {
         guard let rawFrame = cameraManager.currentCIImage else {
             return Image(uiImage: UIImage())
@@ -209,21 +217,24 @@ struct CameraAnalyzeView: View {
         return Image(uiImage: UIImage(cgImage: cgImage))
     }
     
-    
+            /// Display label for the current sampled color.
     private var displayName: String {
         currentSample?.name ?? "Tap to sample"
     }
     
+            /// Formatted best-contrast label for the active sample.
     private var contrastText: String {
         guard let s = currentSample else { return "—" }
         let best = max(s.contrastVsWhite, s.contrastVsBlack)
         return String(format: "%.1f:1 – %@", best, s.readability.rawValue)
     }
     
+            /// Swatch color used in the info card.
     private var swatchColor: Color {
         if let c = currentSample?.uiColor { return Color(c) } else { return .gray }
     }
     
+            /// Bottom sheet card presenting sampled color details and controls.
     private var infoCard: some View {
         VStack(spacing: 14) {
             HStack(spacing: 14) {
@@ -269,7 +280,7 @@ struct CameraAnalyzeView: View {
         .accessibilityLabel("Color analysis card. Tap anywhere on the camera preview to sample a color. Current sample: \(displayName).")
     }
     
-    
+    /// User guidance screen displayed when camera permission is denied.
     private var deniedView: some View {
         VStack(spacing: 20) {
             Image(systemName: "camera.slash.fill")
@@ -293,7 +304,11 @@ struct CameraAnalyzeView: View {
         .navigationTitle("Camera")
     }
     
-    
+    /// Maps tap coordinates from view space into image space and records a sample.
+    ///
+    /// - Parameters:
+    ///   - location: Tap location in view coordinates.
+    ///   - viewSize: Size of the rendered preview region.
     private func handleTap(at location: CGPoint, in viewSize: CGSize) {
         guard let ciImage = cameraManager.currentCIImage else { return }
         
