@@ -2,8 +2,6 @@ import SwiftUI
 import PhotosUI
 import CoreImage
 
-// MARK: - Root Navigation
-
 @MainActor
 struct ContentView: View {
     var body: some View {
@@ -12,8 +10,6 @@ struct ContentView: View {
         }
     }
 }
-
-// MARK: - Welcome Screen
 
 @MainActor
 struct WelcomeView: View {
@@ -26,7 +22,6 @@ struct WelcomeView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 32) {
-                // Header
                 VStack(spacing: 8) {
                     Text("ColorBridge")
                         .font(.largeTitle.bold())
@@ -39,10 +34,8 @@ struct WelcomeView: View {
                         .padding(.horizontal)
                 }
                 
-                // Preview comparison
                 colorPreview
                 
-                // Actions
                 VStack(spacing: 14) {
                     NavigationLink {
                         CameraAnalyzeView()
@@ -65,7 +58,6 @@ struct WelcomeView: View {
                     .tint(.secondary)
                     .accessibilityHint("Opens a built‑in sample chart to preview color analysis.")
                     
-                    // ProgressView shown OUTSIDE the picker label to avoid nonisolated context error
                     if isLoadingPhoto {
                         ProgressView("Loading photo…")
                             .frame(maxWidth: .infinity)
@@ -87,7 +79,6 @@ struct WelcomeView: View {
                 }
                 .padding(.horizontal)
                 
-                // Privacy footer
                 Text("All processing stays on your device.\nNo photos are stored or uploaded.")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
@@ -132,7 +123,6 @@ struct WelcomeView: View {
         }
     }
     
-    // MARK: - Color Preview
     
     private var colorPreview: some View {
         HStack(spacing: 16) {
@@ -169,4 +159,3 @@ struct WelcomeView: View {
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
     }
 }
-

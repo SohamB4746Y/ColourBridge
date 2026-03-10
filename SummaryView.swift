@@ -1,29 +1,20 @@
 import SwiftUI
 import Charts
 
-// MARK: - SummaryView
-
-/// Shows a Swift Charts summary of collected color samples, categorized by
-/// readability, with explanatory text and a button to restart the demo.
 @MainActor
 struct SummaryView: View {
 
     let samples: [ColorSample]
     @Environment(\.dismiss) private var dismiss
 
-    // MARK: Computed Data
-
-    /// Count of samples whose readability is .good or .acceptable.
     private var readableCount: Int {
         samples.filter { $0.readability == .good || $0.readability == .acceptable }.count
     }
 
-    /// Count of samples whose readability is .low.
     private var hardToReadCount: Int {
         samples.filter { $0.readability == .low }.count
     }
 
-    /// Data model for the chart.
     private var chartData: [ReadabilityBucket] {
         [
             ReadabilityBucket(category: "Readable", count: readableCount),
@@ -31,21 +22,14 @@ struct SummaryView: View {
         ]
     }
 
-    // MARK: Body
-
     var body: some View {
         ScrollView {
             VStack(spacing: 28) {
-                // Chart
                 chartSection
 
-                // Explanation
                 explanationSection
 
-                // Restart
                 Button {
-                    // Pop all the way to the root (WelcomeView).
-                    // Walk up the dismiss chain — each call pops one level.
                     dismiss()
                 } label: {
                     Label("Restart Demo", systemImage: "arrow.counterclockwise")
@@ -60,8 +44,6 @@ struct SummaryView: View {
         .navigationTitle("Summary")
         .navigationBarTitleDisplayMode(.inline)
     }
-
-    // MARK: - Chart Section
 
     private var chartSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -91,8 +73,6 @@ struct SummaryView: View {
         }
     }
 
-    // MARK: - Explanation
-
     private var explanationSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             if samples.isEmpty {
@@ -119,11 +99,8 @@ struct SummaryView: View {
     }
 }
 
-// MARK: - Chart Data Model
-
 private struct ReadabilityBucket: Identifiable, Sendable {
     let category: String
     let count: Int
     var id: String { category }
 }
-

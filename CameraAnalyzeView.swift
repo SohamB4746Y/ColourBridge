@@ -2,12 +2,9 @@ import SwiftUI
 @preconcurrency import AVFoundation
 import CoreImage
 
-// MARK: - CameraManager
-
 @MainActor
 final class CameraManager: NSObject, ObservableObject {
     
-    // MARK: Authorization
     
     enum AuthStatus {
         case notDetermined, authorized, denied
@@ -25,10 +22,8 @@ final class CameraManager: NSObject, ObservableObject {
     nonisolated(unsafe) private var lastSampleTime: CFAbsoluteTime = 0
     private let minSampleInterval: CFAbsoluteTime = 1.0 / 30.0
     
-    /// Shared CIContext used for pixel buffer → CGImage conversion on the camera thread.
     nonisolated(unsafe) private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
     
-    // MARK: Setup
     
     func checkAuthorization() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -98,8 +93,6 @@ final class CameraManager: NSObject, ObservableObject {
     }
 }
 
-// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
-
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     nonisolated func captureOutput(_ output: AVCaptureOutput,
                                    didOutput sampleBuffer: CMSampleBuffer,
@@ -110,8 +103,6 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
-        // Convert to CIImage and immediately bake into a CGImage on this thread.
-        // CGImage is a plain immutable value — safe to send across actor boundaries.
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
         
@@ -120,8 +111,6 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         }
     }
 }
-
-// MARK: - CameraAnalyzeView
 
 @MainActor
 struct CameraAnalyzeView: View {
@@ -170,7 +159,6 @@ struct CameraAnalyzeView: View {
         }
     }
     
-    // MARK: Camera Content
     
     private var cameraContent: some View {
         GeometryReader { geo in
@@ -221,7 +209,6 @@ struct CameraAnalyzeView: View {
         return Image(uiImage: UIImage(cgImage: cgImage))
     }
     
-    // MARK: Info Card
     
     private var displayName: String {
         currentSample?.name ?? "Tap to sample"
@@ -282,7 +269,6 @@ struct CameraAnalyzeView: View {
         .accessibilityLabel("Color analysis card. Tap anywhere on the camera preview to sample a color. Current sample: \(displayName).")
     }
     
-    // MARK: Permission Denied
     
     private var deniedView: some View {
         VStack(spacing: 20) {
@@ -307,7 +293,6 @@ struct CameraAnalyzeView: View {
         .navigationTitle("Camera")
     }
     
-    // MARK: Tap Handler
     
     private func handleTap(at location: CGPoint, in viewSize: CGSize) {
         guard let ciImage = cameraManager.currentCIImage else { return }
@@ -363,4 +348,3 @@ struct CameraAnalyzeView: View {
         }
     }
 }
-
