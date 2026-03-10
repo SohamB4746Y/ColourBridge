@@ -1,12 +1,14 @@
 import UIKit
 import CoreImage
 
+/// Readability classification based on WCAG contrast thresholds.
 enum Readability: String, Sendable {
     case good       = "Good"
     case acceptable = "Acceptable"
     case low        = "Low"
 }
 
+/// Supported color-vision simulation modes for analysis and rendering.
 enum SimulationMode: String, CaseIterable, Identifiable, Sendable {
     case normal = "Normal"
     case protan = "Protan"
@@ -15,6 +17,7 @@ enum SimulationMode: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
 }
 
+/// Immutable analysis result for a sampled color point.
 struct ColorSample: Identifiable, Sendable {
     let id = UUID()
     let uiColor: UIColor
@@ -25,8 +28,16 @@ struct ColorSample: Identifiable, Sendable {
     let readability: Readability
 }
 
+/// Core image and color analysis utilities used by camera and sample workflows.
 struct ColorAnalyzer {
 
+    /// Computes the average color around a normalized point in an image.
+    ///
+    /// - Parameters:
+    ///   - ciImage: Source image to sample.
+    ///   - normalizedPoint: Point in normalized coordinates (0...1, 0...1).
+    ///   - sampleRadius: Radius in pixels around the point used to build the sampling rect.
+    /// - Returns: Average `UIColor` for the region, or `nil` when sampling fails.
     static func averageColor(in ciImage: CIImage,
                              at normalizedPoint: CGPoint,
                              sampleRadius: Int = 10) -> UIColor? {
@@ -68,6 +79,12 @@ struct ColorAnalyzer {
         return UIColor(red: red, green: green, blue: blue, alpha: 1)
     }
 
+    /// Returns the WCAG contrast ratio between two colors.
+    ///
+    /// - Parameters:
+    ///   - color1: First color.
+    ///   - color2: Second color.
+    /// - Returns: Ratio in the inclusive range 1...21.
     static func contrastRatio(_ color1: UIColor, _ color2: UIColor) -> Double {
         let l1 = relativeLuminance(of: color1)
         let l2 = relativeLuminance(of: color2)
@@ -76,6 +93,7 @@ struct ColorAnalyzer {
         return (lighter + 0.05) / (darker + 0.05)
     }
 
+    /// Computes relative luminance after sRGB linearization.
     private static func relativeLuminance(of color: UIColor) -> Double {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
@@ -87,6 +105,10 @@ struct ColorAnalyzer {
         return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
     }
 
+    /// Evaluates text/background readability for a color against white and black.
+    ///
+    /// - Parameter color: Target color to evaluate.
+    /// - Returns: Readability bucket using the best contrast of white/black comparison.
     static func readability(for color: UIColor) -> Readability {
         let vsWhite = contrastRatio(color, .white)
         let vsBlack = contrastRatio(color, .black)
@@ -96,6 +118,10 @@ struct ColorAnalyzer {
         return .low
     }
 
+    /// Maps a color to the closest human-readable palette name.
+    ///
+    /// - Parameter color: Color to classify.
+    /// - Returns: Name of the nearest reference color.
     static func name(for color: UIColor) -> String {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
@@ -147,6 +173,12 @@ struct ColorAnalyzer {
         (0.00, 0.00, 0.00, "Black"),
     ]
 
+    /// Applies a color-vision simulation transform to an entire image.
+    ///
+    /// - Parameters:
+    ///   - image: Source image.
+    ///   - mode: Simulation mode to apply.
+    /// - Returns: Simulated image, or original image when no transform is needed.
     static func simulateImage(_ image: CIImage, mode: SimulationMode) -> CIImage {
         guard mode != .normal else { return image }
 
@@ -180,6 +212,12 @@ struct ColorAnalyzer {
         return filter.outputImage ?? image
     }
 
+    /// Applies a color-vision simulation transform to a single color.
+    ///
+    /// - Parameters:
+    ///   - color: Source color.
+    ///   - mode: Simulation mode to apply.
+    /// - Returns: Simulated output color.
     static func simulate(_ color: UIColor, mode: SimulationMode) -> UIColor {
         guard mode != .normal else { return color }
 
@@ -211,12 +249,25 @@ struct ColorAnalyzer {
         )
     }
 
+    /// Determines whether a sampled color is effectively near-white.
+    ///
+    /// - Parameters:
+    ///   - color: Sampled color.
+    ///   - threshold: Lower bound used for each RGB channel.
+    /// - Returns: `true` when all RGB channels exceed the threshold.
     static func isNearWhite(_ color: UIColor, threshold: CGFloat = 0.95) -> Bool {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
         return r > threshold && g > threshold && b > threshold
     }
 
+    /// Runs the full sampling pipeline for a point in an image.
+    ///
+    /// - Parameters:
+    ///   - ciImage: Source image.
+    ///   - normalizedPoint: Point in normalized coordinates (0...1, 0...1).
+    ///   - mode: Simulation mode used before naming and scoring.
+    /// - Returns: A complete `ColorSample` for UI presentation, or `nil` when sampling fails.
     static func sample(from ciImage: CIImage,
                        at normalizedPoint: CGPoint,
                        mode: SimulationMode = .normal) -> ColorSample? {
