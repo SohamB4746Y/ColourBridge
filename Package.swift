@@ -1,6 +1,10 @@
 import PackageDescription
 import AppleProductTypes
 
+/// Swift package manifest for the ColourBridge iOS application.
+///
+/// This manifest defines app metadata, platform constraints, runtime
+/// capabilities, and the executable target used by Swift Playgrounds/Xcode.
 let package = Package(
     name: "ColourBridge",
     platforms: [
@@ -27,8 +31,8 @@ let package = Package(
                 .portraitUpsideDown(.when(deviceFamilies: [.pad]))
             ],
             capabilities: [
-                .photoLibrary(purposeString: "Unknown Usage Description"),
-                .camera(purposeString: "Unknown Usage Description")
+                .photoLibrary(purposeString: "ColourBridge uses your photo library so you can analyze colors in saved images and charts."),
+                .camera(purposeString: "ColourBridge uses the camera to sample and analyze colors in real time.")
             ]
         )
     ],
