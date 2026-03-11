@@ -97,20 +97,36 @@ All image processing and color analysis happens **100% on-device**:
 #### 1. **ColorAnalyzer** (`ColorAnalyzer.swift`)
 The brain of the app—a pure-logic module handling:
 - **Color Sampling**: Uses `CIAreaAverage` filter for efficient pixel averaging in defined regions
+- **Shared CIContext**: A single reusable `CIContext` avoids repeated expensive allocations
 - **WCAG Contrast Calculation**: Implements relative luminance (sRGB linearization + BT.709 coefficients)
 - **Color Naming**: Euclidean distance matching in RGB space against a curated 28-color palette
-- **CVD Simulation**: Implements Viénot/Brettel matrices for Protanopia and Deuteranopia
+- **CVD Simulation**: Implements Viénot/Brettel matrices for Protanopia and Deuteranopia via `CIColorMatrix`
 - **Readability Evaluation**: Maps contrast ratios to WCAG AAA (7:1), AA (4.5:1), or below thresholds
 
-#### 2. **CameraAnalyzeView** (`CameraAnalyzeView.swift`)
+#### 2. **AppConstants** (`AppConstants.swift`)
+Centralised repository of every magic number in the project:
+- Analysis thresholds (`contrastAAA`, `contrastAA`, `nearWhiteThreshold`)
+- Camera frame interval, chart rendering metrics
+- Layout constants (swatch sizes, corner radii, animation durations)
+- Viénot CVD transformation matrices as `SIMD3<Float>` tuples
+
+#### 3. **Components** (`Components.swift`)
+Reusable UI building blocks shared across analysis screens:
+- **HapticEngine**: Light/medium `UIImpactFeedbackGenerator` wrappers
+- **ColorSwatchView**: Accessible swatch with hex and name labelling
+- **TapIndicatorView**: Spring-animated ring overlay at tap location
+- **AnalysisInfoCard**: Floating card with sample info, mode picker, summary button
+
+#### 4. **CameraAnalyzeView** (`CameraAnalyzeView.swift`)
 Real-time camera analysis interface:
-- **CameraManager**: Manages AVCaptureSession lifecycle, authorization, and frame delivery
-- **Live Preview**: Renders camera feed with color-blind simulation overlay
-- **Tap-to-Sample**: Interactive gesture handling with visual feedback (animated ring)
+- **CameraManager**: Manages AVCaptureSession lifecycle, authorization, and throttled frame delivery
+- **Live Preview**: Renders camera feed with cached display images and CVD simulation overlay
+- **Tap-to-Sample**: Interactive gesture handling with spring-animated ring indicator
 - **Sample Collection**: Aggregates multiple samples for summary analysis
 - **Mode Switching**: Real-time segmented control for vision mode selection
+- **Settings Deep-Link**: "Open Settings" button when camera permission is denied
 
-#### 3. **SampleAnalyzeView** (`SampleAnalyzeView.swift`)
+#### 5. **SampleAnalyzeView** (`SampleAnalyzeView.swift`)
 Static image analysis interface:
 - **Dual Mode**: Supports both built-in programmatic chart and user-imported photos
 - **Chart Generation**: Core Graphics-based bar chart with rounded corners and labels
@@ -118,16 +134,17 @@ Static image analysis interface:
 - **Background Filtering**: Ignores near-white pixels (likely chart backgrounds)
 - **Orientation Handling**: Properly handles EXIF orientation for imported photos
 
-#### 4. **SummaryView** (`SummaryView.swift`)
+#### 6. **SummaryView** (`SummaryView.swift`)
 Data visualization and insights:
-- **Swift Charts Integration**: Bar chart showing readable vs. hard-to-read color distribution
+- **Animated Swift Charts**: Bar chart with grow-in entrance animation
+- **Sample List**: Scrollable list with color swatches, hex codes, and readability badges (AAA/AA/Low)
 - **Accessibility Metrics**: Counts and categorizes samples by readability
 - **Educational Content**: Explains findings and offers best practices
-- **Navigation**: Restart button to return to welcome screen
+- **Navigation**: Haptic-feedback restart button to return to welcome screen
 
-#### 5. **ContentView** (`ContentView.swift`)
+#### 7. **ContentView** (`ContentView.swift`)
 Root navigation and entry point:
-- **Welcome Screen**: App overview with preview cards
+- **Welcome Screen**: App overview with gradient-bordered preview cards and staggered button animations
 - **Three Entry Points**: Camera, Sample Chart, Photo Picker
 - **PhotosPicker Integration**: Loads photos with proper EXIF orientation handling
 - **Navigation Stack**: SwiftUI NavigationStack for deep linking
@@ -253,8 +270,11 @@ ColourBridge.swiftpm/
 ├── CameraAnalyzeView.swift     # Real-time camera interface
 ├── SampleAnalyzeView.swift     # Static image/chart analysis
 ├── SummaryView.swift           # Data visualization and insights
+├── AppConstants.swift          # Centralised magic numbers & metrics
+├── Components.swift            # Reusable UI components & haptics
 ├── Assets.xcassets/            # App icons and assets
 ├── README.md                   # This file
+├── CHANGELOG.md                # Release history
 └── .gitignore                  # Git ignore rules
 ```
 
@@ -263,11 +283,13 @@ ColourBridge.swiftpm/
 | File | Purpose | Key Features |
 |------|---------|--------------|
 | `MyApp.swift` | Application lifecycle | SwiftUI App protocol, window configuration |
-| `ContentView.swift` | Main navigation hub | Three entry points, PhotosPicker, preview cards |
-| `ColorAnalyzer.swift` | Pure logic layer | Color sampling, contrast calculation, CVD simulation |
-| `CameraAnalyzeView.swift` | Camera feature | AVFoundation, real-time preview, tap interaction |
+| `ContentView.swift` | Main navigation hub | Three entry points, PhotosPicker, animated preview cards |
+| `ColorAnalyzer.swift` | Pure logic layer | Color sampling, contrast calculation, CVD simulation, shared CIContext |
+| `CameraAnalyzeView.swift` | Camera feature | AVFoundation, real-time preview, tap interaction, Settings deep-link |
 | `SampleAnalyzeView.swift` | Photo/chart analysis | Chart generation, photo import, coordinate mapping |
-| `SummaryView.swift` | Results dashboard | Swift Charts, statistics, educational content |
+| `SummaryView.swift` | Results dashboard | Animated Swift Charts, sample list with badges, educational content |
+| `AppConstants.swift` | Centralised constants | Analysis thresholds, layout metrics, CVD matrices |
+| `Components.swift` | Shared UI components | `HapticEngine`, `ColorSwatchView`, `TapIndicatorView`, `AnalysisInfoCard` |
 
 ---
 
@@ -276,6 +298,8 @@ ColourBridge.swiftpm/
 ### Architecture Principles
 - **Separation of Concerns**: Pure logic (ColorAnalyzer) separate from UI
 - **Single Responsibility**: Each view handles one primary function
+- **Centralised Constants**: `AppConstants` enum eliminates scattered magic numbers
+- **Reusable Components**: Shared `Components.swift` avoids UI duplication
 - **Immutability**: ColorSample and enums are immutable structs/enums
 - **Type Safety**: Strong typing with Swift 6, no force unwrapping
 
@@ -286,16 +310,21 @@ ColourBridge.swiftpm/
 - **Structured Concurrency**: Task-based async/await patterns
 
 ### Accessibility Features
-- **VoiceOver Support**: Comprehensive accessibility labels and hints
+- **VoiceOver Support**: Comprehensive accessibility labels, hints, and sort priority
 - **Dynamic Type**: Respects user font size preferences
 - **High Contrast**: Works well in all color schemes
 - **Descriptive Labels**: Clear button and control labeling
+- **CVD-Safe Chart Colors**: Blue/orange palette distinguishable under protanopia and deuteranopia
+- **Haptic Feedback**: UIKit impact generators for sample taps, actions, and notifications
+- **Hex & Name Labels**: Color swatches include machine-readable hex values and friendly names
 
 ### Performance Optimizations
 - **Efficient Sampling**: CIAreaAverage filter for O(1) region averaging
 - **Frame Throttling**: 30 FPS camera frame processing limit
+- **Shared CIContext**: Single reusable context across all Core Image operations
+- **Cached Display Images**: Display images rebuilt only on frame or mode changes via `onChange`
 - **Lazy Rendering**: SwiftUI's declarative updates minimize overdraw
-- **Reusable Context**: Single CIContext instance for image rendering
+- **Proper Cleanup**: `CameraManager.deinit` stops the capture session
 
 ---
 
@@ -307,7 +336,7 @@ ColourBridge.swiftpm/
 - [ ] **Batch Analysis**: Process multiple images at once
 - [ ] **Color Suggestions**: Recommend accessible alternative colors
 - [ ] **AR Mode**: Real-time color labels using ARKit
-- [ ] **Haptic Feedback**: Vibration feedback for successful samples
+- [x] **Haptic Feedback**: Vibration feedback for successful samples
 - [ ] **Multi-Language Support**: Localization for global accessibility
 - [ ] **iCloud Sync**: Sync analyzed palettes across devices
 - [ ] **Widget Support**: Quick access to last analyzed colors
