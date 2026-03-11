@@ -1,13 +1,30 @@
+// MARK: - Summary View
+
 import SwiftUI
 import Charts
+
+// MARK: - ReadabilityBucket
+
+/// Lightweight chart model representing one readability category bucket.
+private struct ReadabilityBucket: Identifiable, Sendable {
+    let category: String
+    let count: Int
+    var id: String { category }
+}
+
+// MARK: - SummaryView
 
 /// Presents aggregated readability metrics for sampled colors.
 @MainActor
 struct SummaryView: View {
 
+    // MARK: Properties
+
     /// Collected samples from camera or static-image workflows.
     let samples: [ColorSample]
     @Environment(\.dismiss) private var dismiss
+
+    // MARK: Computed Properties
 
     /// Number of samples meeting at least AA readability.
     private var readableCount: Int {
@@ -26,6 +43,8 @@ struct SummaryView: View {
             ReadabilityBucket(category: "Hard to Read", count: hardToReadCount),
         ]
     }
+
+    // MARK: Body
 
     /// Main summary layout containing chart, explanation, and restart action.
     var body: some View {
@@ -51,6 +70,8 @@ struct SummaryView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    // MARK: Chart Section
+
     /// Bar chart section visualizing readability distribution.
     private var chartSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -64,7 +85,7 @@ struct SummaryView: View {
                     y: .value("Count", bucket.count)
                 )
                 .foregroundStyle(bucket.category == "Readable" ? Color.green : Color.red)
-                .cornerRadius(6)
+                .cornerRadius(AppConstants.chartBarCornerRadius)
                 .annotation(position: .top) {
                     Text("\(bucket.count)")
                         .font(.caption.bold())
@@ -79,6 +100,8 @@ struct SummaryView: View {
             .padding(.horizontal)
         }
     }
+
+    // MARK: Explanation Section
 
     /// Explanatory copy contextualizing the current session results.
     private var explanationSection: some View {
@@ -105,11 +128,4 @@ struct SummaryView: View {
         .padding(.horizontal)
         .accessibilityElement(children: .combine)
     }
-}
-
-/// Lightweight chart model representing one readability category bucket.
-private struct ReadabilityBucket: Identifiable, Sendable {
-    let category: String
-    let count: Int
-    var id: String { category }
 }

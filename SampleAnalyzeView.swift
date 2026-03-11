@@ -1,16 +1,24 @@
+// MARK: - Sample / Photo Analysis
+
 import SwiftUI
 import CoreImage
 import AVFoundation
+
+// MARK: - SampleAnalyzeView
 
 /// Static-image analysis screen for built-in charts and imported photos.
 @MainActor
 struct SampleAnalyzeView: View {
 
-    /// Optional external image selected by the user.
+    // MARK: Properties
+
+    /// Optional external image selected by the user from the photo library.
     var externalImage: CIImage? = nil
 
     /// Indicates whether the current session uses an imported image.
     private var isExternalImage: Bool { externalImage != nil }
+
+    // MARK: State
 
     @State private var selectedMode: SimulationMode = .normal
     @State private var currentSample: ColorSample?
@@ -21,6 +29,8 @@ struct SampleAnalyzeView: View {
     @State private var baseCIImage: CIImage?
     @State private var chartCIImage: CIImage?
     @State private var displayUIImage: UIImage?
+
+    // MARK: Body
 
     /// Main layout for image interaction and bottom analysis controls.
     var body: some View {
@@ -37,34 +47,36 @@ struct SampleAnalyzeView: View {
                     }
                     .overlay {
                         if let loc = tapLocation {
-                            Circle()
-                                .stroke(Color.white, lineWidth: 2.5)
-                                .shadow(color: .black.opacity(0.5), radius: 3)
-                                .frame(width: 44, height: 44)
-                                .position(loc)
-                                .allowsHitTesting(false)
-                                .transition(.opacity)
+                            TapIndicatorView(position: loc)
                         }
                     }
             }
             .ignoresSafeArea(edges: .bottom)
 
-            infoCard
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+            AnalysisInfoCard(
+                currentSample: currentSample,
+                collectedSamples: collectedSamples,
+                selectedMode: $selectedMode,
+                showSummary: $showSummary,
+                emptyLabel: "Tap a bar to sample"
+            )
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
         .navigationTitle(isExternalImage ? "Photo Analysis" : "Sample Chart")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(isPresented: $showSummary) {
             SummaryView(samples: collectedSamples)
         }
-        .onAppear {
+        .task {
             prepareImages()
         }
         .onChange(of: selectedMode) {
             prepareImages()
         }
     }
+
+    // MARK: Chart Data
 
     /// Source bars used by the built-in demo chart.
     private static let chartBars: [(UIColor, CGFloat, String)] = [
@@ -76,13 +88,15 @@ struct SampleAnalyzeView: View {
         (UIColor(red: 0.00, green: 0.70, blue: 0.65, alpha: 1), 0.65, "F"),
     ]
 
+    // MARK: Chart Renderer
+
     /// Renders a chart image with accessibility simulation applied to bar colors.
     ///
     /// - Parameters:
     ///   - size: Output image size.
     ///   - mode: Simulation mode applied before drawing.
     /// - Returns: Rendered `UIImage` used by the analysis view.
-    private static func renderChartImage(size: CGSize = CGSize(width: 600, height: 400),
+    private static func renderChartImage(size: CGSize = AppConstants.chartImageSize,
                                          mode: SimulationMode = .normal) -> UIImage {
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { ctx in
@@ -92,12 +106,12 @@ struct SampleAnalyzeView: View {
             gc.fill(CGRect(origin: .zero, size: size))
 
             let barCount = CGFloat(chartBars.count)
-            let totalPadding = size.width * 0.15
-            let gap: CGFloat = 10
+            let totalPadding = size.width * AppConstants.chartPaddingFraction
+            let gap = AppConstants.chartBarGap
             let usableWidth = size.width - totalPadding
             let barWidth = (usableWidth - gap * (barCount - 1)) / barCount
-            let chartTop: CGFloat = 40
-            let chartBottom: CGFloat = size.height - 50
+            let chartTop = AppConstants.chartTopInset
+            let chartBottom = size.height - AppConstants.chartBottomInset
             let chartHeight = chartBottom - chartTop
 
             for (i, (color, heightFrac, label)) in chartBars.enumerated() {
@@ -107,9 +121,12 @@ struct SampleAnalyzeView: View {
 
                 let displayColor = ColorAnalyzer.simulate(color, mode: mode)
                 gc.setFillColor(displayColor.cgColor)
-                let path = UIBezierPath(roundedRect: barRect,
-                                        byRoundingCorners: [.topLeft, .topRight],
-                                        cornerRadii: CGSize(width: 6, height: 6))
+                let path = UIBezierPath(
+                    roundedRect: barRect,
+                    byRoundingCorners: [.topLeft, .topRight],
+                    cornerRadii: CGSize(width: AppConstants.chartBarCornerRadius,
+                                        height: AppConstants.chartBarCornerRadius)
+                )
                 gc.addPath(path.cgPath)
                 gc.fillPath()
 
@@ -135,6 +152,8 @@ struct SampleAnalyzeView: View {
         }
     }
 
+    // MARK: Display Image
+
     /// Display image backed by either imported content or the generated sample chart.
     private var displayImage: Image {
         if let uiImage = displayUIImage {
@@ -142,6 +161,8 @@ struct SampleAnalyzeView: View {
         }
         return Image(uiImage: Self.renderChartImage(mode: selectedMode))
     }
+
+    // MARK: Image Preparation
 
     /// Prepares render and sampling sources for the currently selected mode.
     private func prepareImages() {
@@ -151,8 +172,9 @@ struct SampleAnalyzeView: View {
             }
             let simulated = ColorAnalyzer.simulateImage(external, mode: selectedMode)
             chartCIImage = baseCIImage
-            let ctx = CIContext()
-            if let cgImg = ctx.createCGImage(simulated, from: simulated.extent) {
+            if let cgImg = ColorAnalyzer.sharedContext.createCGImage(
+                simulated, from: simulated.extent
+            ) {
                 displayUIImage = UIImage(cgImage: cgImg)
             }
         } else {
@@ -164,71 +186,7 @@ struct SampleAnalyzeView: View {
         }
     }
 
-    /// Label for the current sampled color.
-    private var displayName: String {
-        currentSample?.name ?? "Tap a bar to sample"
-    }
-
-    /// Formatted readability text derived from the best contrast result.
-    private var contrastText: String {
-        guard let s = currentSample else { return "—" }
-        let best = max(s.contrastVsWhite, s.contrastVsBlack)
-        return String(format: "%.1f:1 – %@", best, s.readability.rawValue)
-    }
-
-    /// Swatch color displayed in the analysis card.
-    private var swatchColor: Color {
-        if let c = currentSample?.uiColor { return Color(c) } else { return .gray }
-    }
-
-    /// Bottom analysis panel with mode selector and navigation to summary.
-    private var infoCard: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(swatchColor)
-                    .frame(width: 52, height: 52)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
-                    )
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(displayName)
-                        .font(.title3.bold())
-                    Text("Contrast: \(contrastText)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
-
-            Picker("Simulation Mode", selection: $selectedMode) {
-                ForEach(SimulationMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Button {
-                showSummary = true
-            } label: {
-                Label("See Summary", systemImage: "chart.bar.xaxis")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .disabled(collectedSamples.isEmpty)
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Color analysis card. Tap a bar in the chart to sample its color. Current sample: \(displayName). \(collectedSamples.count) samples collected.")
-    }
-
-    /// Default size used for internally generated charts.
-    private static let chartSize = CGSize(width: 600, height: 400)
+    // MARK: Tap Handling
 
     /// Converts tap coordinates to image coordinates and records a color sample.
     ///
@@ -267,7 +225,7 @@ struct SampleAnalyzeView: View {
             return
         }
 
-        withAnimation(.easeOut(duration: 0.25)) {
+        withAnimation(.easeOut(duration: AppConstants.tapAnimationDuration)) {
             tapLocation = location
         }
 
@@ -276,7 +234,7 @@ struct SampleAnalyzeView: View {
             collectedSamples.append(sample)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + AppConstants.tapIndicatorDismissDelay) {
             withAnimation { tapLocation = nil }
         }
     }

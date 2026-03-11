@@ -1,46 +1,103 @@
+// MARK: - Color Analysis Engine
+
 import UIKit
 import CoreImage
 
-/// Readability classification based on WCAG contrast thresholds.
+// MARK: - Readability
+
+/// WCAG-based readability classification for foreground colors against
+/// common light and dark backgrounds.
 enum Readability: String, Sendable {
+    /// Contrast ratio ≥ 7:1 (WCAG AAA).
     case good       = "Good"
+    /// Contrast ratio ≥ 4.5:1 (WCAG AA).
     case acceptable = "Acceptable"
+    /// Contrast ratio < 4.5:1.
     case low        = "Low"
 }
 
-/// Supported color-vision simulation modes for analysis and rendering.
+// MARK: - SimulationMode
+
+/// Color-vision deficiency simulation modes supported by the analysis engine.
 enum SimulationMode: String, CaseIterable, Identifiable, Sendable {
     case normal = "Normal"
     case protan = "Protan"
     case deutan = "Deutan"
 
     var id: String { rawValue }
+
+    /// Returns the Viénot RGB row-vectors for this mode, or `nil` for normal vision.
+    var matrixVectors: (r: SIMD3<Float>, g: SIMD3<Float>, b: SIMD3<Float>)? {
+        switch self {
+        case .normal: return nil
+        case .protan: return AppConstants.protanMatrix
+        case .deutan: return AppConstants.deutanMatrix
+        }
+    }
 }
 
-/// Immutable analysis result for a sampled color point.
+// MARK: - ColorSample
+
+/// Immutable analysis result for a single sampled color point.
 struct ColorSample: Identifiable, Sendable {
     let id = UUID()
+
+    /// The UIColor as it would appear under the active simulation mode.
     let uiColor: UIColor
+
+    /// Tap location in normalised image coordinates (0…1, 0…1).
     let location: CGPoint
+
+    /// Human-readable name matched from the reference palette.
     let name: String
+
+    /// WCAG contrast ratio against a white background.
     let contrastVsWhite: Double
+
+    /// WCAG contrast ratio against a black background.
     let contrastVsBlack: Double
+
+    /// Readability bucket derived from the best contrast ratio.
     let readability: Readability
+
+    /// Hex string representation of the sampled color (e.g. "#FF4040").
+    var hexString: String {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        uiColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        return String(format: "#%02X%02X%02X",
+                      Int(r * 255), Int(g * 255), Int(b * 255))
+    }
 }
 
-/// Core image and color analysis utilities used by camera and sample workflows.
+// MARK: - ColorAnalyzer
+
+/// Pure-logic helpers for color sampling, naming, contrast evaluation,
+/// and color-vision deficiency simulation.
+///
+/// This struct contains no UI dependencies and can be tested in isolation.
 struct ColorAnalyzer {
 
-    /// Computes the average color around a normalized point in an image.
+    // MARK: Shared CIContext
+
+    /// Reusable context for all Core Image rendering operations.
+    /// Creating a `CIContext` is expensive — sharing one avoids repeated allocation.
+    static let sharedContext = CIContext(options: [
+        .useSoftwareRenderer: false,
+        .workingColorSpace: NSNull()
+    ])
+
+    // MARK: Average Color
+
+    /// Computes the average color in a small region around a normalised point.
     ///
     /// - Parameters:
     ///   - ciImage: Source image to sample.
-    ///   - normalizedPoint: Point in normalized coordinates (0...1, 0...1).
-    ///   - sampleRadius: Radius in pixels around the point used to build the sampling rect.
-    /// - Returns: Average `UIColor` for the region, or `nil` when sampling fails.
+    ///   - normalizedPoint: Point in normalised coordinates (0…1, 0…1).
+    ///   - sampleRadius: Radius in pixels around the centre for the sampling rect.
+    /// - Returns: The average `UIColor`, or `nil` when sampling fails.
     static func averageColor(in ciImage: CIImage,
                              at normalizedPoint: CGPoint,
-                             sampleRadius: Int = 10) -> UIColor? {
+                             sampleRadius: Int = AppConstants.defaultSampleRadius) -> UIColor? {
         let extent = ciImage.extent
         guard extent.width > 0, extent.height > 0 else { return nil }
 
@@ -65,26 +122,24 @@ struct ColorAnalyzer {
               let outputImage = avgFilter.outputImage else { return nil }
 
         var bitmap = [UInt8](repeating: 0, count: 4)
-        let ctx = CIContext(options: [.workingColorSpace: NSNull()])
-        ctx.render(outputImage,
-                   toBitmap: &bitmap,
-                   rowBytes: 4,
-                   bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-                   format: .RGBA8,
-                   colorSpace: nil)
+        sharedContext.render(outputImage,
+                            toBitmap: &bitmap,
+                            rowBytes: 4,
+                            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+                            format: .RGBA8,
+                            colorSpace: nil)
 
-        let red   = CGFloat(bitmap[0]) / 255.0
-        let green = CGFloat(bitmap[1]) / 255.0
-        let blue  = CGFloat(bitmap[2]) / 255.0
-        return UIColor(red: red, green: green, blue: blue, alpha: 1)
+        return UIColor(red:   CGFloat(bitmap[0]) / 255.0,
+                       green: CGFloat(bitmap[1]) / 255.0,
+                       blue:  CGFloat(bitmap[2]) / 255.0,
+                       alpha: 1)
     }
 
-    /// Returns the WCAG contrast ratio between two colors.
+    // MARK: Contrast Ratio (WCAG 2.x)
+
+    /// Returns the WCAG contrast ratio between two colors (range 1…21).
     ///
-    /// - Parameters:
-    ///   - color1: First color.
-    ///   - color2: Second color.
-    /// - Returns: Ratio in the inclusive range 1...21.
+    /// Uses relative luminance with sRGB linearisation per the WCAG 2.x specification.
     static func contrastRatio(_ color1: UIColor, _ color2: UIColor) -> Double {
         let l1 = relativeLuminance(of: color1)
         let l2 = relativeLuminance(of: color2)
@@ -93,7 +148,7 @@ struct ColorAnalyzer {
         return (lighter + 0.05) / (darker + 0.05)
     }
 
-    /// Computes relative luminance after sRGB linearization.
+    /// Computes relative luminance after sRGB linearisation (BT.709 coefficients).
     private static func relativeLuminance(of color: UIColor) -> Double {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
@@ -105,23 +160,27 @@ struct ColorAnalyzer {
         return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b)
     }
 
-    /// Evaluates text/background readability for a color against white and black.
+    // MARK: Readability
+
+    /// Evaluates readability against both white and black backgrounds.
     ///
     /// - Parameter color: Target color to evaluate.
-    /// - Returns: Readability bucket using the best contrast of white/black comparison.
+    /// - Returns: The readability bucket using the better of the two contrast comparisons.
     static func readability(for color: UIColor) -> Readability {
         let vsWhite = contrastRatio(color, .white)
         let vsBlack = contrastRatio(color, .black)
         let best = max(vsWhite, vsBlack)
-        if best >= 7.0   { return .good }
-        if best >= 4.5   { return .acceptable }
+        if best >= AppConstants.contrastAAA { return .good }
+        if best >= AppConstants.contrastAA  { return .acceptable }
         return .low
     }
 
-    /// Maps a color to the closest human-readable palette name.
+    // MARK: Color Naming
+
+    /// Maps a color to the closest human-readable name from a curated palette.
     ///
-    /// - Parameter color: Color to classify.
-    /// - Returns: Name of the nearest reference color.
+    /// Distance is computed in sRGB Euclidean space — simple but effective
+    /// for a small reference set.
     static func name(for color: UIColor) -> String {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
@@ -142,29 +201,40 @@ struct ColorAnalyzer {
         return bestName
     }
 
+    /// Curated reference palette with friendly descriptive names.
     private static let referencePalette: [(Double, Double, Double, String)] = [
+        // Reds
         (0.90, 0.15, 0.15, "Deep Red"),
         (1.00, 0.40, 0.40, "Coral Red"),
         (0.80, 0.00, 0.20, "Crimson"),
+        // Oranges
         (1.00, 0.60, 0.10, "Orange"),
         (1.00, 0.45, 0.00, "Dark Orange"),
+        // Yellows
         (1.00, 0.90, 0.20, "Yellow"),
         (0.85, 0.75, 0.10, "Gold"),
+        // Greens
         (0.15, 0.70, 0.20, "Green"),
         (0.00, 0.50, 0.25, "Dark Green"),
         (0.55, 0.85, 0.35, "Lime Green"),
+        // Blue-Greens
         (0.00, 0.70, 0.65, "Teal"),
         (0.10, 0.55, 0.55, "Blue-Green"),
+        // Blues
         (0.15, 0.35, 0.85, "Blue"),
         (0.10, 0.20, 0.60, "Dark Blue"),
         (0.40, 0.70, 1.00, "Sky Blue"),
+        // Purples
         (0.55, 0.20, 0.80, "Purple"),
         (0.75, 0.35, 0.85, "Lavender"),
         (0.50, 0.00, 0.50, "Deep Purple"),
+        // Pinks
         (1.00, 0.40, 0.70, "Pink"),
         (1.00, 0.70, 0.80, "Light Pink"),
+        // Browns
         (0.55, 0.30, 0.15, "Brown"),
         (0.40, 0.25, 0.10, "Dark Brown"),
+        // Neutrals
         (1.00, 1.00, 1.00, "White"),
         (0.85, 0.85, 0.85, "Light Gray"),
         (0.60, 0.60, 0.60, "Gray"),
@@ -173,73 +243,45 @@ struct ColorAnalyzer {
         (0.00, 0.00, 0.00, "Black"),
     ]
 
-    /// Applies a color-vision simulation transform to an entire image.
+    // MARK: CVD Simulation — Full Image
+
+    /// Applies a color-vision deficiency simulation to an entire `CIImage`.
     ///
-    /// - Parameters:
-    ///   - image: Source image.
-    ///   - mode: Simulation mode to apply.
-    /// - Returns: Simulated image, or original image when no transform is needed.
+    /// Uses `CIColorMatrix` with the Viénot row-vectors stored in
+    /// ``AppConstants``.  Returns the original image for `.normal`.
     static func simulateImage(_ image: CIImage, mode: SimulationMode) -> CIImage {
-        guard mode != .normal else { return image }
+        guard let m = mode.matrixVectors else { return image }
 
-        let rVec: CIVector
-        let gVec: CIVector
-        let bVec: CIVector
-
-        switch mode {
-        case .normal:
-            return image
-        case .protan:
-            rVec = CIVector(x: 0.567, y: 0.433, z: 0.000, w: 0)
-            gVec = CIVector(x: 0.558, y: 0.442, z: 0.000, w: 0)
-            bVec = CIVector(x: 0.000, y: 0.242, z: 0.758, w: 0)
-        case .deutan:
-            rVec = CIVector(x: 0.625, y: 0.375, z: 0.000, w: 0)
-            gVec = CIVector(x: 0.700, y: 0.300, z: 0.000, w: 0)
-            bVec = CIVector(x: 0.000, y: 0.300, z: 0.700, w: 0)
-        }
-
+        let rVec = CIVector(x: CGFloat(m.r.x), y: CGFloat(m.r.y), z: CGFloat(m.r.z), w: 0)
+        let gVec = CIVector(x: CGFloat(m.g.x), y: CGFloat(m.g.y), z: CGFloat(m.g.z), w: 0)
+        let bVec = CIVector(x: CGFloat(m.b.x), y: CGFloat(m.b.y), z: CGFloat(m.b.z), w: 0)
         let aVec = CIVector(x: 0, y: 0, z: 0, w: 1)
 
         guard let filter = CIFilter(name: "CIColorMatrix") else { return image }
-        filter.setValue(image,  forKey: kCIInputImageKey)
-        filter.setValue(rVec,   forKey: "inputRVector")
-        filter.setValue(gVec,   forKey: "inputGVector")
-        filter.setValue(bVec,   forKey: "inputBVector")
-        filter.setValue(aVec,   forKey: "inputAVector")
+        filter.setValue(image, forKey: kCIInputImageKey)
+        filter.setValue(rVec,  forKey: "inputRVector")
+        filter.setValue(gVec,  forKey: "inputGVector")
+        filter.setValue(bVec,  forKey: "inputBVector")
+        filter.setValue(aVec,  forKey: "inputAVector")
         filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 0), forKey: "inputBiasVector")
 
         return filter.outputImage ?? image
     }
 
-    /// Applies a color-vision simulation transform to a single color.
+    // MARK: CVD Simulation — Single Color
+
+    /// Simulates what a single color looks like under a given deficiency mode.
     ///
-    /// - Parameters:
-    ///   - color: Source color.
-    ///   - mode: Simulation mode to apply.
-    /// - Returns: Simulated output color.
+    /// Uses the same Viénot/Brettel-style linear RGB transforms as the image path.
     static func simulate(_ color: UIColor, mode: SimulationMode) -> UIColor {
-        guard mode != .normal else { return color }
+        guard let m = mode.matrixVectors else { return color }
 
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
 
-        let (sr, sg, sb): (CGFloat, CGFloat, CGFloat)
-
-        switch mode {
-        case .normal:
-            return color
-
-        case .protan:
-            sr = 0.567 * r + 0.433 * g + 0.000 * b
-            sg = 0.558 * r + 0.442 * g + 0.000 * b
-            sb = 0.000 * r + 0.242 * g + 0.758 * b
-
-        case .deutan:
-            sr = 0.625 * r + 0.375 * g + 0.000 * b
-            sg = 0.700 * r + 0.300 * g + 0.000 * b
-            sb = 0.000 * r + 0.300 * g + 0.700 * b
-        }
+        let sr = CGFloat(m.r.x) * r + CGFloat(m.r.y) * g + CGFloat(m.r.z) * b
+        let sg = CGFloat(m.g.x) * r + CGFloat(m.g.y) * g + CGFloat(m.g.z) * b
+        let sb = CGFloat(m.b.x) * r + CGFloat(m.b.y) * g + CGFloat(m.b.z) * b
 
         return UIColor(
             red:   min(max(sr, 0), 1),
@@ -249,25 +291,25 @@ struct ColorAnalyzer {
         )
     }
 
-    /// Determines whether a sampled color is effectively near-white.
-    ///
-    /// - Parameters:
-    ///   - color: Sampled color.
-    ///   - threshold: Lower bound used for each RGB channel.
-    /// - Returns: `true` when all RGB channels exceed the threshold.
-    static func isNearWhite(_ color: UIColor, threshold: CGFloat = 0.95) -> Bool {
+    // MARK: Background Detection
+
+    /// Returns `true` when all RGB channels exceed the near-white threshold.
+    static func isNearWhite(_ color: UIColor,
+                            threshold: CGFloat = AppConstants.nearWhiteThreshold) -> Bool {
         var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
         color.getRed(&r, green: &g, blue: &b, alpha: &a)
         return r > threshold && g > threshold && b > threshold
     }
 
-    /// Runs the full sampling pipeline for a point in an image.
+    // MARK: Combined Sample Pipeline
+
+    /// Runs the full sampling pipeline: average → simulate → name → contrast → readability.
     ///
     /// - Parameters:
     ///   - ciImage: Source image.
-    ///   - normalizedPoint: Point in normalized coordinates (0...1, 0...1).
-    ///   - mode: Simulation mode used before naming and scoring.
-    /// - Returns: A complete `ColorSample` for UI presentation, or `nil` when sampling fails.
+    ///   - normalizedPoint: Point in normalised coordinates (0…1, 0…1).
+    ///   - mode: CVD simulation mode applied before scoring.
+    /// - Returns: A complete ``ColorSample`` for UI presentation, or `nil` on failure.
     static func sample(from ciImage: CIImage,
                        at normalizedPoint: CGPoint,
                        mode: SimulationMode = .normal) -> ColorSample? {

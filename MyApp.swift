@@ -1,4 +1,8 @@
+// MARK: - Application Entry Point
+
 import SwiftUI
+
+// MARK: - ColorBridgeApp
 
 /// Application entry point for ColourBridge.
 @main

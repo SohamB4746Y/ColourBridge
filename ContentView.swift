@@ -1,10 +1,17 @@
+// MARK: - Root Navigation
+
 import SwiftUI
 import PhotosUI
 import CoreImage
 
+// MARK: - ContentView
+
 /// Root navigation container for the application.
 @MainActor
 struct ContentView: View {
+
+    // MARK: Body
+
     /// Declares the root navigation stack.
     var body: some View {
         NavigationStack {
@@ -13,34 +20,43 @@ struct ContentView: View {
     }
 }
 
+// MARK: - WelcomeView
+
 /// Landing experience that routes users to camera, sample, or photo workflows.
 @MainActor
 struct WelcomeView: View {
-    
+
+    // MARK: State
+
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var loadedCIImage: CIImage?
     @State private var isNavigatingToPhoto = false
     @State private var isLoadingPhoto = false
-    
+
+    // MARK: Body
+
     /// Primary welcome interface and top-level actions.
     var body: some View {
         ScrollView {
-            VStack(spacing: 32) {
+            VStack(spacing: AppConstants.welcomeSectionSpacing) {
+                // MARK: Header
                 VStack(spacing: 8) {
                     Text("ColorBridge")
                         .font(.largeTitle.bold())
                         .accessibilityAddTraits(.isHeader)
-                    
+
                     Text("Helps people with color‑vision deficiencies understand color‑coded information using the camera.")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
-                
+
+                // MARK: Preview
                 colorPreview
-                
-                VStack(spacing: 14) {
+
+                // MARK: Actions
+                VStack(spacing: AppConstants.welcomeButtonSpacing) {
                     NavigationLink {
                         CameraAnalyzeView()
                     } label: {
@@ -50,7 +66,7 @@ struct WelcomeView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .accessibilityHint("Opens the live camera to analyze colors in your surroundings.")
-                    
+
                     NavigationLink {
                         SampleAnalyzeView()
                     } label: {
@@ -61,7 +77,7 @@ struct WelcomeView: View {
                     .controlSize(.large)
                     .tint(.secondary)
                     .accessibilityHint("Opens a built‑in sample chart to preview color analysis.")
-                    
+
                     if isLoadingPhoto {
                         ProgressView("Loading photo…")
                             .frame(maxWidth: .infinity)
@@ -82,13 +98,14 @@ struct WelcomeView: View {
                     }
                 }
                 .padding(.horizontal)
-                
+
+                // MARK: Privacy Notice
                 Text("All processing stays on your device.\nNo photos are stored or uploaded.")
                     .font(.footnote)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
             }
-            .padding(.vertical, 40)
+            .padding(.vertical, AppConstants.welcomeVerticalPadding)
         }
         .navigationTitle("ColorBridge")
         .toolbar(.hidden, for: .navigationBar)
@@ -126,7 +143,9 @@ struct WelcomeView: View {
             }
         }
     }
-    
+
+    // MARK: Color Preview
+
     /// Preview strip illustrating standard versus accessibility-enhanced presentation.
     private var colorPreview: some View {
         HStack(spacing: 16) {
@@ -137,7 +156,9 @@ struct WelcomeView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Preview showing an original color pair and its accessible alternative with patterns.")
     }
-    
+
+    // MARK: Preview Card
+
     /// Builds a compact preview card used in the landing comparison row.
     ///
     /// - Parameters:
@@ -150,7 +171,7 @@ struct WelcomeView: View {
             Text(title)
                 .font(.caption.bold())
                 .foregroundStyle(.secondary)
-            
+
             HStack(spacing: 6) {
                 ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
                     RoundedRectangle(cornerRadius: 8)

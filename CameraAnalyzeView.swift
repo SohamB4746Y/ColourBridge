@@ -1,30 +1,49 @@
+// MARK: - Camera Analysis
+
 import SwiftUI
 @preconcurrency import AVFoundation
 import CoreImage
 
+// MARK: - CameraManager
+
 /// Manages camera permissions, session lifecycle, and frame delivery.
 @MainActor
 final class CameraManager: NSObject, ObservableObject {
-    
+
+    // MARK: Types
+
     /// Camera permission state used by the UI to present the correct screen.
     enum AuthStatus {
         case notDetermined, authorized, denied
     }
-    
+
+    // MARK: Published State
+
     @Published var authorizationStatus: AuthStatus = .notDetermined
     @Published var currentCIImage: CIImage?
-    
+
+    // MARK: Private Properties
+
     private let session = AVCaptureSession()
     private let videoOutput = AVCaptureVideoDataOutput()
     private let processingQueue = DispatchQueue(label: "com.colorbridge.camera",
                                                 qos: .userInitiated)
     private var isConfigured = false
-    
+
     nonisolated(unsafe) private var lastSampleTime: CFAbsoluteTime = 0
-    private let minSampleInterval: CFAbsoluteTime = 1.0 / 30.0
-    
+    private let minSampleInterval: CFAbsoluteTime = AppConstants.cameraFrameInterval
+
+    /// Shared Core Image context — reused across all frame renders.
     nonisolated(unsafe) private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
-    
+
+    // MARK: Lifecycle
+
+    deinit {
+        session.stopRunning()
+    }
+
+    // MARK: Authorization
+
     /// Requests or refreshes camera authorization status.
     func checkAuthorization() {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
@@ -40,14 +59,16 @@ final class CameraManager: NSObject, ObservableObject {
             authorizationStatus = .denied
         }
     }
-    
+
+    // MARK: Session Control
+
     /// Starts camera capture, configuring the session once when required.
     func startSession() {
         let session = self.session
         let videoOutput = self.videoOutput
         let needsConfigure = !isConfigured
         isConfigured = true
-        
+
         processingQueue.async { [weak self] in
             if needsConfigure {
                 self?.configureSession(session: session, videoOutput: videoOutput)
@@ -57,13 +78,23 @@ final class CameraManager: NSObject, ObservableObject {
             }
         }
     }
-    
+
+    /// Stops camera capture asynchronously.
+    func stopSession() {
+        let session = self.session
+        processingQueue.async {
+            session.stopRunning()
+        }
+    }
+
+    // MARK: Session Configuration
+
     /// Configures camera input and video output for capture callbacks.
     nonisolated private func configureSession(session: AVCaptureSession,
                                               videoOutput: AVCaptureVideoDataOutput) {
         session.beginConfiguration()
         session.sessionPreset = .high
-        
+
         guard let camera = AVCaptureDevice.default(.builtInWideAngleCamera,
                                                    for: .video, position: .back),
               let input = try? AVCaptureDeviceInput(device: camera),
@@ -72,7 +103,7 @@ final class CameraManager: NSObject, ObservableObject {
             return
         }
         session.addInput(input)
-        
+
         let delegateQueue = DispatchQueue(label: "com.colorbridge.camera.delegate",
                                           qos: .userInitiated)
         videoOutput.setSampleBufferDelegate(self, queue: delegateQueue)
@@ -80,22 +111,16 @@ final class CameraManager: NSObject, ObservableObject {
         if session.canAddOutput(videoOutput) {
             session.addOutput(videoOutput)
         }
-        
+
         if let connection = videoOutput.connection(with: .video) {
             connection.videoRotationAngle = 90
         }
-        
+
         session.commitConfiguration()
     }
-    
-            /// Stops camera capture asynchronously.
-    func stopSession() {
-        let session = self.session
-        processingQueue.async {
-            session.stopRunning()
-        }
-    }
 }
+
+// MARK: - AVCaptureVideoDataOutputSampleBufferDelegate
 
 extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     /// Delivers throttled camera frames converted to `CIImage` for UI analysis.
@@ -105,33 +130,37 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         let now = CFAbsoluteTimeGetCurrent()
         guard now - lastSampleTime >= minSampleInterval else { return }
         lastSampleTime = now
-        
+
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        
+
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
-        
+
         Task { @MainActor [weak self] in
             self?.currentCIImage = CIImage(cgImage: cgImage)
         }
     }
 }
 
+// MARK: - CameraAnalyzeView
+
 /// Live camera analysis screen with tap-to-sample interaction.
 @MainActor
 struct CameraAnalyzeView: View {
-    
+
+    // MARK: State
+
     @StateObject private var cameraManager = CameraManager()
     @Environment(\.dismiss) private var dismiss
-    
+
     @State private var currentSample: ColorSample?
     @State private var collectedSamples: [ColorSample] = []
     @State private var selectedMode: SimulationMode = .normal
     @State private var tapLocation: CGPoint?
     @State private var showSummary = false
-    
-    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
-    
+
+    // MARK: Body
+
     /// Main camera state routing based on permission and session status.
     var body: some View {
         Group {
@@ -144,7 +173,7 @@ struct CameraAnalyzeView: View {
                 cameraContent
             }
         }
-        .onAppear {
+        .task {
             cameraManager.checkAuthorization()
             if cameraManager.authorizationStatus == .authorized {
                 cameraManager.startSession()
@@ -165,7 +194,9 @@ struct CameraAnalyzeView: View {
             SummaryView(samples: collectedSamples)
         }
     }
-    
+
+    // MARK: Camera Content
+
     /// Camera preview layer with tap gesture sampling and floating analysis card.
     private var cameraContent: some View {
         GeometryReader { geo in
@@ -176,7 +207,7 @@ struct CameraAnalyzeView: View {
                     .frame(width: geo.size.width, height: geo.size.height)
                     .clipped()
                     .allowsHitTesting(false)
-                
+
                 Rectangle()
                     .fill(Color.white.opacity(0.001))
                     .contentShape(Rectangle())
@@ -184,118 +215,63 @@ struct CameraAnalyzeView: View {
                     .onTapGesture { location in
                         handleTap(at: location, in: geo.size)
                     }
-                
+
                 if let loc = tapLocation {
-                    Circle()
-                        .stroke(Color.white, lineWidth: 2)
-                        .frame(width: 44, height: 44)
-                        .position(loc)
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
+                    TapIndicatorView(position: loc, lineWidth: 2)
                 }
-                
-                infoCard
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 16)
+
+                AnalysisInfoCard(
+                    currentSample: currentSample,
+                    collectedSamples: collectedSamples,
+                    selectedMode: $selectedMode,
+                    showSummary: $showSummary,
+                    emptyLabel: "Tap to sample"
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             }
         }
         .ignoresSafeArea()
     }
-    
+
+    // MARK: Filtered Image
+
     /// Returns a simulated preview image for the selected accessibility mode.
     private var filteredCameraImage: Image {
         guard let rawFrame = cameraManager.currentCIImage else {
             return Image(uiImage: UIImage())
         }
-        
+
         let simulated = ColorAnalyzer.simulateImage(rawFrame, mode: selectedMode)
-        
-        guard let cgImage = ciContext.createCGImage(simulated, from: simulated.extent) else {
+
+        guard let cgImage = ColorAnalyzer.sharedContext.createCGImage(
+            simulated, from: simulated.extent
+        ) else {
             return Image(uiImage: UIImage())
         }
-        
+
         return Image(uiImage: UIImage(cgImage: cgImage))
     }
-    
-            /// Display label for the current sampled color.
-    private var displayName: String {
-        currentSample?.name ?? "Tap to sample"
-    }
-    
-            /// Formatted best-contrast label for the active sample.
-    private var contrastText: String {
-        guard let s = currentSample else { return "—" }
-        let best = max(s.contrastVsWhite, s.contrastVsBlack)
-        return String(format: "%.1f:1 – %@", best, s.readability.rawValue)
-    }
-    
-            /// Swatch color used in the info card.
-    private var swatchColor: Color {
-        if let c = currentSample?.uiColor { return Color(c) } else { return .gray }
-    }
-    
-            /// Bottom sheet card presenting sampled color details and controls.
-    private var infoCard: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 14) {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(swatchColor)
-                    .frame(width: 52, height: 52)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(.white.opacity(0.3), lineWidth: 1)
-                    )
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(displayName)
-                        .font(.title3.bold())
-                    Text("Contrast: \(contrastText)")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                
-                Spacer()
-            }
-            
-            Picker("Simulation Mode", selection: $selectedMode) {
-                ForEach(SimulationMode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            
-            Button {
-                showSummary = true
-            } label: {
-                Label("See Summary", systemImage: "chart.bar.xaxis")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.regular)
-            .disabled(collectedSamples.isEmpty)
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel("Color analysis card. Tap anywhere on the camera preview to sample a color. Current sample: \(displayName).")
-    }
-    
+
+    // MARK: Denied View
+
     /// User guidance screen displayed when camera permission is denied.
     private var deniedView: some View {
         VStack(spacing: 20) {
             Image(systemName: "camera.slash.fill")
                 .font(.system(size: 56))
                 .foregroundStyle(.secondary)
-            
+                .accessibilityHidden(true)
+
             Text("Camera Access Denied")
                 .font(.title2.bold())
-            
+
             Text("ColorBridge needs camera access to analyze colors in real time. You can enable it in Settings → Privacy → Camera.")
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            
+
             Button("Go Back") {
                 dismiss()
             }
@@ -303,7 +279,9 @@ struct CameraAnalyzeView: View {
         }
         .navigationTitle("Camera")
     }
-    
+
+    // MARK: Tap Handling
+
     /// Maps tap coordinates from view space into image space and records a sample.
     ///
     /// - Parameters:
@@ -311,11 +289,11 @@ struct CameraAnalyzeView: View {
     ///   - viewSize: Size of the rendered preview region.
     private func handleTap(at location: CGPoint, in viewSize: CGSize) {
         guard let ciImage = cameraManager.currentCIImage else { return }
-        
+
         let imageSize = ciImage.extent.size
         let imageAspect = imageSize.width / imageSize.height
         let viewAspect  = viewSize.width  / viewSize.height
-        
+
         let drawnRect: CGRect
         if imageAspect > viewAspect {
             let drawnHeight = viewSize.height
@@ -328,37 +306,37 @@ struct CameraAnalyzeView: View {
             let originY     = (viewSize.height - drawnHeight) / 2.0
             drawnRect = CGRect(x: 0, y: originY, width: drawnWidth, height: drawnHeight)
         }
-        
+
         let relativeX = location.x - drawnRect.origin.x
         let relativeY = location.y - drawnRect.origin.y
-        
+
         let scaleX = imageSize.width  / drawnRect.width
         let scaleY = imageSize.height / drawnRect.height
         let pixelX = relativeX * scaleX
         let pixelY = relativeY * scaleY
-        
+
         let flippedPixelY = imageSize.height - pixelY
-        
+
         let normalized = CGPoint(
             x: pixelX / imageSize.width,
             y: flippedPixelY / imageSize.height
         )
-        
+
         let clamped = CGPoint(
             x: min(max(normalized.x, 0), 1),
             y: min(max(normalized.y, 0), 1)
         )
-        
-        withAnimation(.easeOut(duration: 0.25)) {
+
+        withAnimation(.easeOut(duration: AppConstants.tapAnimationDuration)) {
             tapLocation = location
         }
-        
+
         if let sample = ColorAnalyzer.sample(from: ciImage, at: clamped, mode: selectedMode) {
             currentSample = sample
             collectedSamples.append(sample)
         }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + AppConstants.tapIndicatorDismissDelay) {
             withAnimation { tapLocation = nil }
         }
     }
