@@ -158,6 +158,7 @@ struct CameraAnalyzeView: View {
     @State private var selectedMode: SimulationMode = .normal
     @State private var tapLocation: CGPoint?
     @State private var showSummary = false
+    @State private var cachedDisplayImage: UIImage?
 
     // MARK: Body
 
@@ -187,6 +188,12 @@ struct CameraAnalyzeView: View {
                 cameraManager.startSession()
             }
         }
+        .onChange(of: cameraManager.currentCIImage) {
+            updateDisplayImage()
+        }
+        .onChange(of: selectedMode) {
+            updateDisplayImage()
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
@@ -201,7 +208,7 @@ struct CameraAnalyzeView: View {
     private var cameraContent: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottom) {
-                filteredCameraImage
+                displayImage
                     .resizable()
                     .scaledToFill()
                     .frame(width: geo.size.width, height: geo.size.height)
@@ -234,23 +241,25 @@ struct CameraAnalyzeView: View {
         .ignoresSafeArea()
     }
 
-    // MARK: Filtered Image
+    // MARK: Cached Display Image
 
-    /// Returns a simulated preview image for the selected accessibility mode.
-    private var filteredCameraImage: Image {
-        guard let rawFrame = cameraManager.currentCIImage else {
-            return Image(uiImage: UIImage())
+    /// The current preview image (updated via `onChange`).
+    private var displayImage: Image {
+        if let uiImage = cachedDisplayImage {
+            return Image(uiImage: uiImage)
         }
+        return Image(uiImage: UIImage())
+    }
 
+    /// Rebuilds the display image from the latest camera frame and simulation mode.
+    /// Called via `onChange` so the heavy CIContext work runs once per frame/mode change.
+    private func updateDisplayImage() {
+        guard let rawFrame = cameraManager.currentCIImage else { return }
         let simulated = ColorAnalyzer.simulateImage(rawFrame, mode: selectedMode)
-
         guard let cgImage = ColorAnalyzer.sharedContext.createCGImage(
             simulated, from: simulated.extent
-        ) else {
-            return Image(uiImage: UIImage())
-        }
-
-        return Image(uiImage: UIImage(cgImage: cgImage))
+        ) else { return }
+        cachedDisplayImage = UIImage(cgImage: cgImage)
     }
 
     // MARK: Denied View
@@ -336,7 +345,8 @@ struct CameraAnalyzeView: View {
             collectedSamples.append(sample)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + AppConstants.tapIndicatorDismissDelay) {
+        Task {
+            try? await Task.sleep(for: .seconds(AppConstants.tapIndicatorDismissDelay))
             withAnimation { tapLocation = nil }
         }
     }

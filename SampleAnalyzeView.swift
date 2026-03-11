@@ -155,11 +155,12 @@ struct SampleAnalyzeView: View {
     // MARK: Display Image
 
     /// Display image backed by either imported content or the generated sample chart.
+    /// Always returns from the cached `displayUIImage` which is eagerly set in `prepareImages`.
     private var displayImage: Image {
         if let uiImage = displayUIImage {
             return Image(uiImage: uiImage)
         }
-        return Image(uiImage: Self.renderChartImage(mode: selectedMode))
+        return Image(uiImage: UIImage())
     }
 
     // MARK: Image Preparation
@@ -234,7 +235,8 @@ struct SampleAnalyzeView: View {
             collectedSamples.append(sample)
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + AppConstants.tapIndicatorDismissDelay) {
+        Task {
+            try? await Task.sleep(for: .seconds(AppConstants.tapIndicatorDismissDelay))
             withAnimation { tapLocation = nil }
         }
     }
