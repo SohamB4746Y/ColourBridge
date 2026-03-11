@@ -222,6 +222,12 @@ struct CameraAnalyzeView: View {
                     .onTapGesture { location in
                         handleTap(at: location, in: geo.size)
                     }
+                    .accessibilityLabel("Camera preview")
+                    .accessibilityHint("Tap anywhere to sample the color at that point.")
+
+                if collectedSamples.isEmpty {
+                    instructionBanner
+                }
 
                 if let loc = tapLocation {
                     TapIndicatorView(position: loc, lineWidth: 2)
@@ -260,6 +266,25 @@ struct CameraAnalyzeView: View {
             simulated, from: simulated.extent
         ) else { return }
         cachedDisplayImage = UIImage(cgImage: cgImage)
+    }
+
+    // MARK: Instruction Banner
+
+    /// First-time instruction banner shown before any samples are taken.
+    private var instructionBanner: some View {
+        VStack {
+            Text("Tap anywhere on the preview to sample a color")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.6), in: Capsule())
+                .padding(.top, 60)
+
+            Spacer()
+        }
+        .allowsHitTesting(false)
+        .transition(.opacity)
     }
 
     // MARK: Denied View
@@ -343,9 +368,8 @@ struct CameraAnalyzeView: View {
         if let sample = ColorAnalyzer.sample(from: ciImage, at: clamped, mode: selectedMode) {
             currentSample = sample
             collectedSamples.append(sample)
+            HapticEngine.sampleTap()
         }
-
-        Task {
             try? await Task.sleep(for: .seconds(AppConstants.tapIndicatorDismissDelay))
             withAnimation { tapLocation = nil }
         }

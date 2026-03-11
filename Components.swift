@@ -1,6 +1,30 @@
 // MARK: - Reusable UI Components
 
 import SwiftUI
+import UIKit
+
+// MARK: - HapticEngine
+
+/// Lightweight wrapper around UIKit feedback generators for consistent haptics.
+enum HapticEngine {
+    /// Fires a light impact when a color is sampled.
+    static func sampleTap() {
+        let generator = UIImpactFeedbackGenerator(style: .light)
+        generator.impactOccurred()
+    }
+
+    /// Fires a medium impact for navigation actions.
+    static func action() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+    }
+
+    /// Fires a notification feedback for results or errors.
+    static func notification(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(type)
+    }
+}
 
 // MARK: - ColorSwatchView
 
@@ -13,6 +37,12 @@ struct ColorSwatchView: View {
 
     /// The color to display inside the swatch.
     let color: Color
+
+    /// Optional hex string for accessibility labelling (e.g. "#FF4040").
+    var hexLabel: String?
+
+    /// Optional color name for accessibility labelling.
+    var colorName: String?
 
     /// Side length of the square swatch. Defaults to ``AppConstants/swatchSize``.
     var size: CGFloat = AppConstants.swatchSize
@@ -27,6 +57,15 @@ struct ColorSwatchView: View {
                 RoundedRectangle(cornerRadius: AppConstants.swatchCornerRadius)
                     .strokeBorder(Color.primary.opacity(0.2), lineWidth: 1)
             )
+            .accessibilityLabel(accessibilityText)
+    }
+
+    /// Constructs a descriptive label including color name and hex value.
+    private var accessibilityText: String {
+        var parts: [String] = ["Color swatch"]
+        if let name = colorName { parts.append(name) }
+        if let hex = hexLabel { parts.append(hex) }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -54,6 +93,7 @@ struct TapIndicatorView: View {
             .position(position)
             .allowsHitTesting(false)
             .transition(.opacity)
+            .accessibilityHidden(true)
     }
 }
 
@@ -88,6 +128,10 @@ struct AnalysisInfoCard: View {
         currentSample?.name ?? emptyLabel
     }
 
+    private var hexText: String {
+        currentSample?.hexString ?? ""
+    }
+
     private var contrastText: String {
         guard let s = currentSample else { return "—" }
         let best = max(s.contrastVsWhite, s.contrastVsBlack)
@@ -104,11 +148,22 @@ struct AnalysisInfoCard: View {
         VStack(spacing: 14) {
             // MARK: Sample Row
             HStack(spacing: 14) {
-                ColorSwatchView(color: swatchColor)
+                ColorSwatchView(
+                    color: swatchColor,
+                    hexLabel: currentSample?.hexString,
+                    colorName: currentSample?.name
+                )
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(displayName)
                         .font(.title3.bold())
+
+                    if let sample = currentSample {
+                        Text(sample.hexString)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+
                     Text("Contrast: \(contrastText)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -124,9 +179,11 @@ struct AnalysisInfoCard: View {
                 }
             }
             .pickerStyle(.segmented)
+            .accessibilityHint("Switch between normal vision, protanopia, and deuteranopia simulation.")
 
             // MARK: Summary Button
             Button {
+                HapticEngine.action()
                 showSummary = true
             } label: {
                 Label("See Summary", systemImage: "chart.bar.xaxis")
@@ -135,11 +192,15 @@ struct AnalysisInfoCard: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.regular)
             .disabled(collectedSamples.isEmpty)
+            .accessibilityHint(collectedSamples.isEmpty
+                ? "Sample at least one color first."
+                : "View readability breakdown for \(collectedSamples.count) samples.")
         }
         .padding()
         .background(.ultraThinMaterial,
                      in: RoundedRectangle(cornerRadius: AppConstants.infoCardCornerRadius))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel("Color analysis card. Current sample: \(displayName). \(collectedSamples.count) samples collected.")
+        .accessibilityLabel("Color analysis card. Current sample: \(displayName)\(hexText.isEmpty ? "" : ", \(hexText)"). \(collectedSamples.count) samples collected.")
+        .accessibilitySortPriority(1)
     }
 }

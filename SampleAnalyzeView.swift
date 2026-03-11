@@ -36,20 +36,42 @@ struct SampleAnalyzeView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             GeometryReader { geo in
-                displayImage
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: geo.size.width, height: geo.size.height)
-                    .clipped()
-                    .contentShape(Rectangle())
-                    .onTapGesture { location in
-                        handleTap(at: location, in: geo.size)
-                    }
-                    .overlay {
-                        if let loc = tapLocation {
-                            TapIndicatorView(position: loc)
+                ZStack {
+                    displayImage
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                        .contentShape(Rectangle())
+                        .onTapGesture { location in
+                            handleTap(at: location, in: geo.size)
                         }
+                        .accessibilityLabel(isExternalImage ? "Imported photo" : "Sample chart")
+                        .accessibilityHint("Tap on a colored area to sample it.")
+                        .overlay {
+                            if let loc = tapLocation {
+                                TapIndicatorView(position: loc)
+                            }
+                        }
+
+                    if collectedSamples.isEmpty {
+                        VStack {
+                            Text(isExternalImage
+                                ? "Tap anywhere on the photo to sample a color"
+                                : "Tap a colored bar to sample it")
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(.black.opacity(0.6), in: Capsule())
+                                .padding(.top, 16)
+
+                            Spacer()
+                        }
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
                     }
+                }
             }
             .ignoresSafeArea(edges: .bottom)
 
@@ -233,6 +255,7 @@ struct SampleAnalyzeView: View {
         if let sample = ColorAnalyzer.sample(from: ciImage, at: normalized, mode: selectedMode) {
             currentSample = sample
             collectedSamples.append(sample)
+            HapticEngine.sampleTap()
         }
 
         Task {

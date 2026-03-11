@@ -73,31 +73,37 @@ struct SummaryView: View {
     // MARK: Chart Section
 
     /// Bar chart section visualizing readability distribution.
+    /// Uses blue/orange (CVD-safe) palette with pattern marks for additional differentiation.
     private var chartSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Readability Overview")
                 .font(.title3.bold())
                 .padding(.horizontal)
+                .accessibilityAddTraits(.isHeader)
 
             Chart(chartData) { bucket in
                 BarMark(
                     x: .value("Category", bucket.category),
                     y: .value("Count", bucket.count)
                 )
-                .foregroundStyle(bucket.category == "Readable" ? Color.green : Color.red)
+                .foregroundStyle(bucket.category == "Readable"
+                    ? Color.blue
+                    : Color.orange)
                 .cornerRadius(AppConstants.chartBarCornerRadius)
                 .annotation(position: .top) {
                     Text("\(bucket.count)")
                         .font(.caption.bold())
                         .foregroundStyle(.secondary)
                 }
-                .accessibilityLabel("\(bucket.category), \(bucket.count) taps")
+                .accessibilityLabel("\(bucket.category): \(bucket.count) sample\(bucket.count == 1 ? "" : "s")")
             }
             .chartYAxis {
                 AxisMarks(position: .leading)
             }
             .frame(height: 220)
             .padding(.horizontal)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Bar chart showing \(readableCount) readable and \(hardToReadCount) hard to read samples.")
         }
     }
 
@@ -117,7 +123,7 @@ struct SummaryView: View {
                     if hardToReadCount > 0 {
                         Text("**\(hardToReadCount)** of those had low contrast and may be hard to distinguish for people with color‑vision deficiencies.")
                     } else {
-                        Text("All sampled colors met at least a 4.5 : 1 contrast ratio — great for readability!")
+                        Text("All sampled colors met at least a \(String(format: "%.1f", AppConstants.contrastAA)) : 1 contrast ratio — great for readability!")
                     }
 
                     Text("Adding labels, patterns, or textures alongside color makes information accessible to everyone, regardless of how they perceive color.")
