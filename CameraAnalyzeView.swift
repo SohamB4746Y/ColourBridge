@@ -306,10 +306,22 @@ struct CameraAnalyzeView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
 
-            Button("Go Back") {
-                dismiss()
+            VStack(spacing: 12) {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Label("Open Settings", systemImage: "gear")
+                        .frame(maxWidth: 220)
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button("Go Back") {
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
             }
-            .buttonStyle(.borderedProminent)
         }
         .navigationTitle("Camera")
     }

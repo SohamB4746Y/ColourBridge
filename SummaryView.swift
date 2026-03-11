@@ -24,6 +24,10 @@ struct SummaryView: View {
     let samples: [ColorSample]
     @Environment(\.dismiss) private var dismiss
 
+    // MARK: Animation State
+
+    @State private var chartAppeared = false
+
     // MARK: Computed Properties
 
     /// Number of samples meeting at least AA readability.
@@ -46,15 +50,20 @@ struct SummaryView: View {
 
     // MARK: Body
 
-    /// Main summary layout containing chart, explanation, and restart action.
+    /// Main summary layout containing chart, samples, explanation, and restart action.
     var body: some View {
         ScrollView {
             VStack(spacing: 28) {
                 chartSection
 
+                if !samples.isEmpty {
+                    sampleListSection
+                }
+
                 explanationSection
 
                 Button {
+                    HapticEngine.action()
                     dismiss()
                 } label: {
                     Label("Restart Demo", systemImage: "arrow.counterclockwise")
@@ -68,6 +77,11 @@ struct SummaryView: View {
         }
         .navigationTitle("Summary")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            withAnimation(.easeOut(duration: 0.7).delay(0.15)) {
+                chartAppeared = true
+            }
+        }
     }
 
     // MARK: Chart Section
@@ -84,16 +98,19 @@ struct SummaryView: View {
             Chart(chartData) { bucket in
                 BarMark(
                     x: .value("Category", bucket.category),
-                    y: .value("Count", bucket.count)
+                    y: .value("Count", chartAppeared ? bucket.count : 0)
                 )
                 .foregroundStyle(bucket.category == "Readable"
                     ? Color.blue
                     : Color.orange)
                 .cornerRadius(AppConstants.chartBarCornerRadius)
                 .annotation(position: .top) {
-                    Text("\(bucket.count)")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
+                    if chartAppeared {
+                        Text("\(bucket.count)")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+                            .transition(.opacity)
+                    }
                 }
                 .accessibilityLabel("\(bucket.category): \(bucket.count) sample\(bucket.count == 1 ? "" : "s")")
             }
@@ -102,9 +119,79 @@ struct SummaryView: View {
             }
             .frame(height: 220)
             .padding(.horizontal)
+            .animation(.easeOut(duration: 0.7), value: chartAppeared)
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Bar chart showing \(readableCount) readable and \(hardToReadCount) hard to read samples.")
         }
+    }
+
+    // MARK: Sample List Section
+
+    /// Scrollable list of collected color samples with swatches and contrast info.
+    private var sampleListSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Collected Samples")
+                    .font(.title3.bold())
+                    .accessibilityAddTraits(.isHeader)
+
+                Spacer()
+
+                Text("\(samples.count)")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(.secondary))
+                    .accessibilityLabel("\(samples.count) total")
+            }
+            .padding(.horizontal)
+
+            LazyVStack(spacing: 8) {
+                ForEach(samples) { sample in
+                    HStack(spacing: 12) {
+                        ColorSwatchView(
+                            color: Color(sample.uiColor),
+                            hexLabel: sample.hexString,
+                            colorName: sample.name,
+                            size: 36
+                        )
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(sample.name)
+                                .font(.subheadline.weight(.medium))
+                            Text(sample.hexString)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        readabilityBadge(for: sample.readability)
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 6)
+                }
+            }
+        }
+    }
+
+    // MARK: Readability Badge
+
+    /// Compact colored badge indicating readability level.
+    private func readabilityBadge(for level: Readability) -> some View {
+        let (text, color): (String, Color) = switch level {
+        case .good:       ("AAA", .blue)
+        case .acceptable: ("AA",  .cyan)
+        case .low:        ("Low", .orange)
+        }
+        return Text(text)
+            .font(.caption2.bold())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(color))
+            .accessibilityLabel(level.rawValue)
     }
 
     // MARK: Explanation Section

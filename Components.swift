@@ -71,7 +71,8 @@ struct ColorSwatchView: View {
 
 // MARK: - TapIndicatorView
 
-/// Animated ring that appears at the user's tap location, then fades out.
+/// Animated ring that appears at the user's tap location with a spring
+/// scale-in effect, then fades out.
 struct TapIndicatorView: View {
 
     // MARK: Properties
@@ -82,6 +83,10 @@ struct TapIndicatorView: View {
     /// Stroke line width.
     var lineWidth: CGFloat = 2.5
 
+    // MARK: State
+
+    @State private var appeared = false
+
     // MARK: Body
 
     var body: some View {
@@ -90,10 +95,20 @@ struct TapIndicatorView: View {
             .shadow(color: .black.opacity(0.5), radius: 3)
             .frame(width: AppConstants.tapIndicatorSize,
                    height: AppConstants.tapIndicatorSize)
+            .scaleEffect(appeared ? 1.0 : 0.5)
+            .opacity(appeared ? 1.0 : 0.0)
             .position(position)
             .allowsHitTesting(false)
-            .transition(.opacity)
+            .transition(.asymmetric(
+                insertion: .scale(scale: 0.5).combined(with: .opacity),
+                removal: .opacity
+            ))
             .accessibilityHidden(true)
+            .task {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    appeared = true
+                }
+            }
     }
 }
 
@@ -199,6 +214,8 @@ struct AnalysisInfoCard: View {
         .padding()
         .background(.ultraThinMaterial,
                      in: RoundedRectangle(cornerRadius: AppConstants.infoCardCornerRadius))
+        .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: currentSample?.id)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Color analysis card. Current sample: \(displayName)\(hexText.isEmpty ? "" : ", \(hexText)"). \(collectedSamples.count) samples collected.")
         .accessibilitySortPriority(1)

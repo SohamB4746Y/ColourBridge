@@ -32,6 +32,8 @@ struct WelcomeView: View {
     @State private var loadedCIImage: CIImage?
     @State private var isNavigatingToPhoto = false
     @State private var isLoadingPhoto = false
+    @State private var headerVisible = false
+    @State private var buttonsVisible = false
 
     // MARK: Body
 
@@ -40,17 +42,25 @@ struct WelcomeView: View {
         ScrollView {
             VStack(spacing: AppConstants.welcomeSectionSpacing) {
                 // MARK: Header
-                VStack(spacing: 8) {
+                VStack(spacing: 12) {
+                    Image(systemName: "eye.trianglebadge.exclamationmark")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.tint)
+                        .symbolRenderingMode(.hierarchical)
+                        .accessibilityHidden(true)
+
                     Text("ColorBridge")
                         .font(.largeTitle.bold())
                         .accessibilityAddTraits(.isHeader)
 
-                    Text("Helps people with color‑vision deficiencies understand color‑coded information using the camera.")
-                        .font(.body)
+                    Text("Understand color‑coded information through the lens of color‑vision accessibility.")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal)
                 }
+                .opacity(headerVisible ? 1 : 0)
+                .offset(y: headerVisible ? 0 : 20)
 
                 // MARK: Preview
                 colorPreview
@@ -100,15 +110,29 @@ struct WelcomeView: View {
                 .padding(.horizontal)
 
                 // MARK: Privacy Notice
-                Text("All processing stays on your device.\nNo photos are stored or uploaded.")
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
-                    .multilineTextAlignment(.center)
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.shield.fill")
+                        .foregroundStyle(.tertiary)
+                        .font(.footnote)
+                        .accessibilityHidden(true)
+                    Text("All processing stays on your device. No photos are stored or uploaded.")
+                        .font(.footnote)
+                        .foregroundStyle(.tertiary)
+                        .multilineTextAlignment(.center)
+                }
             }
             .padding(.vertical, AppConstants.welcomeVerticalPadding)
         }
         .navigationTitle("ColorBridge")
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            withAnimation(.easeOut(duration: 0.6).delay(0.1)) {
+                headerVisible = true
+            }
+            withAnimation(.easeOut(duration: 0.5).delay(0.4)) {
+                buttonsVisible = true
+            }
+        }
         .onChange(of: selectedPhoto) {
             guard let item = selectedPhoto else { return }
             isLoadingPhoto = true
@@ -189,5 +213,16 @@ struct WelcomeView: View {
         }
         .padding()
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.2), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
+        )
     }
 }
